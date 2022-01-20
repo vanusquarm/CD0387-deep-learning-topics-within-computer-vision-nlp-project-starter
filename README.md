@@ -15,6 +15,7 @@ The data is uploaded to the S3 bucket through the AWS Gateway so that SageMaker 
 ## Script Files used
 1. `hpo.py` for hyperparameter tuning jobs where we train the model for multiple time with different hyperparameters and search for the best one based on loss metrics.
 2. `train_model.py` for really training the model with the best parameters getting from the previous tuning jobs, and put debug and profiler hooks for debugging purpose.
+3. `inference.py`: It includes the required methods (`model_fn` to load the model and `input_fn` to transform the input into something which can be understood by the model) for the model to be deployed.  
 
 
 ## Hyperparameter Tuning
@@ -27,9 +28,9 @@ Below are hyperparameter types and their respective ranges used in the training
 
 ```python
 hyperparameter_ranges = {
-    "lr": ContinuousParameter(0.1, 0.11),
-    "batch-size": CategoricalParameter([16, 32, 128]),
-    "epochs": IntegerParameter(1, 2)
+    "batch-size": sagemaker.tuner.CategoricalParameter([32, 64, 128, 256, 512]),
+    "lr": sagemaker.tuner.ContinuousParameter(0.01, 0.1),
+    "epochs": sagemaker.tuner.IntegerParameter(2, 4)
 }
 ```
 The objective type is to maximize accuracy.
@@ -43,7 +44,7 @@ metric_definitions = [{"Name": "average test accuracy", "Regex": "Test set: Aver
 Best hyperparameter values
 
 ```python
-hyperparameters = {'batch-size': 32, 'lr': '0.1022061234548314', 'epochs': '1'}
+hyperparameters = {'batch-size': '512', 'lr': '0.026305482032806977', 'epochs': '4'}
 ```
 
 
@@ -53,7 +54,7 @@ It took 14 minutes to complete all 4 jobs, I will use 4 concurrent jobs next tim
 ![Training Jobs](https://github.com/vanusquarm/CD0387-deep-learning-topics-within-computer-vision-nlp-project-starter/blob/main/screenshots/training-jobs.PNG)
 
 **Hyperparameter Training Jobs:**
-![Active Endpoint](https://github.com/vanusquarm/CD0387-deep-learning-topics-within-computer-vision-nlp-project-starter/blob/main/screenshots/hyperparameter-training-jobs.PNG)
+![Hyperparameters Training Jobs](https://github.com/vanusquarm/CD0387-deep-learning-topics-within-computer-vision-nlp-project-starter/blob/main/screenshots/hyperparameter-training-jobs.PNG)
 
 **Best Hyperparameters:**
 ![Hyperparameters](https://github.com/vanusquarm/CD0387-deep-learning-topics-within-computer-vision-nlp-project-starter/blob/main/screenshots/best-training-job.PNG)
@@ -76,24 +77,20 @@ The deployed model runs on 1 instance type of a standard compute resource ("ml.t
 Upon performing the model deploy, an Endpoint is created. 
 To query the endpoint with the test sample input, first perform a resize, crop, toTensor, and normalization transformation on the image, and then pass the transformed image to the predict function of the endpoint.
 
-Use [Python Pillow](https://pypi.org/project/Pillow/) and io to transform the jpg to Tensor binary and serve it to the endpoint.
+Execute the following lines of code replacing `IMAGE_PATH` by the path where your image is stored and `ENDPOINT` by the name of your endpoint:
 ```python
-#   Run a prediction on the endpoint
-
+import io
+import sagemaker
 from PIL import Image
-import torchvision.transforms as transforms
+from sagemaker.serializers import IdentitySerializer
+from sagemaker.pytorch.model import PyTorchPredictor
 
-transform = transforms.Compose([
-        transforms.Resize(256),
-        transforms.RandomCrop(224),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ])
-PIL_image = Image.open("dogImages/test/BigLee.jpg") 
-image = transform(PIL_image) #   Your code to load and preprocess image to send to endpoint for prediction
-payload = image.unsqueeze(dim=0) #  Changes the shape of tensor from [224, 224, 3] to [1, 3, 224, 224].
-response = predictor.predict(payload) # Make your prediction
-response
+serializer = IdentitySerializer("image/jpeg")
+predictor = PyTorchPredictor(ENDPOINT, serializer=serializer, sagemaker_session=sagemaker.Session())
+
+buffer = io.BytesIO()
+Image.open(IMAGE_PATH).save(buffer, format="JPEG")
+response = predictor.predict(buffer.getvalue())
 ```
 
 **ACTIVE ENDPOINT**
