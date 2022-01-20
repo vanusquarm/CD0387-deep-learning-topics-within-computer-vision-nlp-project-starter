@@ -50,10 +50,13 @@ hyperparameters = {'batch-size': 32, 'lr': '0.1022061234548314', 'epochs': '1'}
 **Training Jobs:**
 I used 4 max jobs with 2 concurrent jobs.
 It took 14 minutes to complete all 4 jobs, I will use 4 concurrent jobs next time to save time. 
-![Training Jobs](https://github.com/vanusquarm/Dog-breed-prediction/blob/main/screenshots/training%20jobs.PNG)
+![Training Jobs](https://github.com/vanusquarm/Dog-breed-prediction/blob/main/screenshots/training-jobs.PNG)
+
+**Hyperparameter Training Jobs:**
+![Active Endpoint](https://github.com/vanusquarm/Dog-breed-prediction/blob/main/screenshots/hyperparameter-training-jobs.PNG)
 
 **Best Hyperparameters:**
-![Hyperparameters](https://github.com/vanusquarm/Dog-breed-prediction/blob/main/screenshots/best-training%20jobs.PNG)
+![Hyperparameters](https://github.com/vanusquarm/Dog-breed-prediction/blob/main/screenshots/best-training-job.PNG)
 
 
 ## Debugging and Profiling
@@ -66,7 +69,7 @@ I finally started the training job by fitting the training data to the estimator
 My training job was quite short. Observing the peaks in utilization of cpu, gpu, memory and IO helped to better select the right instance type for training for improved resource efficiency.
 However, I experienced a higher bottleneck in cpu operation indicting that the gpu was waiting most of the time for data to arrive 
 
-![Hyperparameters](https://github.com/vanusquarm/Dog-breed-prediction/blob/main/screenshots/Cloudwatch-logs.PNG)
+![Hyperparameters](https://github.com/vanusquarm/Dog-breed-prediction/blob/main/screenshots/cloudwatch-logs.PNG)
 
 ## Model Deployment
 The deployed model runs on 1 instance type of a standard compute resource ("ml.t2.medium"). The configuration of these parameters are set using the PyTorch deploy function. 
@@ -86,7 +89,7 @@ transform = transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
-PIL_image = Image.open("dogImages/test/001.Affenpinscher/Affenpinscher_00071.jpg") 
+PIL_image = Image.open("dogImages/test/BigLee.jpg") 
 image = transform(PIL_image) #   Your code to load and preprocess image to send to endpoint for prediction
 payload = image.unsqueeze(dim=0) #  Changes the shape of tensor from [224, 224, 3] to [1, 3, 224, 224].
 response = predictor.predict(payload) # Make your prediction
@@ -95,6 +98,6 @@ response
 
 **ACTIVE ENDPOINT**
 - SAGEMAKER STUDIO UI
-![Active Endpoint](https://github.com/vanusquarm/Dog-breed-prediction/blob/main/screenshots/Active%20Endpoint.PNG)
+![Active Endpoint](https://github.com/vanusquarm/Dog-breed-prediction/blob/main/screenshots/active-endpoint.PNG)
 
 
