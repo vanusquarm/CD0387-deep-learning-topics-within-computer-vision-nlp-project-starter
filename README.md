@@ -10,7 +10,7 @@ The dog breed dataset is used for the training
 
 ### Access
 The data is uploaded to the S3 bucket through the AWS Gateway so that SageMaker has access to the data, using sagemaker.Session().upload() api.
-- s3://{bucket-name}/dog-image-data/
+- s3://{bucket-name}/dogImages/
 
 ## Script Files used
 1. `hpo.py` for hyperparameter tuning jobs where we train the model for multiple time with different hyperparameters and search for the best one based on loss metrics.
@@ -50,13 +50,13 @@ hyperparameters = {'batch-size': 32, 'lr': '0.1022061234548314', 'epochs': '1'}
 **Training Jobs:**
 I used 4 max jobs with 2 concurrent jobs.
 It took 14 minutes to complete all 4 jobs, I will use 4 concurrent jobs next time to save time. 
-![Training Jobs](https://github.com/vanusquarm/Dog-breed-prediction/blob/main/screenshots/training-jobs.PNG)
+![Training Jobs](https://github.com/vanusquarm/CD0387-deep-learning-topics-within-computer-vision-nlp-project-starter/blob/main/screenshots/training-jobs.PNG)
 
 **Hyperparameter Training Jobs:**
-![Active Endpoint](https://github.com/vanusquarm/Dog-breed-prediction/blob/main/screenshots/hyperparameter-training-jobs.PNG)
+![Active Endpoint](https://github.com/vanusquarm/CD0387-deep-learning-topics-within-computer-vision-nlp-project-starter/blob/main/screenshots/hyperparameter-training-jobs.PNG)
 
 **Best Hyperparameters:**
-![Hyperparameters](https://github.com/vanusquarm/Dog-breed-prediction/blob/main/screenshots/best-training-job.PNG)
+![Hyperparameters](https://github.com/vanusquarm/CD0387-deep-learning-topics-within-computer-vision-nlp-project-starter/blob/main/screenshots/best-training-job.PNG)
 
 
 ## Debugging and Profiling
@@ -69,7 +69,7 @@ I finally started the training job by fitting the training data to the estimator
 My training job was quite short. Observing the peaks in utilization of cpu, gpu, memory and IO helped to better select the right instance type for training for improved resource efficiency.
 However, I experienced a higher bottleneck in cpu operation indicting that the gpu was waiting most of the time for data to arrive 
 
-![Hyperparameters](https://github.com/vanusquarm/Dog-breed-prediction/blob/main/screenshots/cloudwatch-logs.PNG)
+![Hyperparameters](https://github.com/vanusquarm/CD0387-deep-learning-topics-within-computer-vision-nlp-project-starter/blob/main/screenshots/cloudwatch-logs.PNG)
 
 ## Model Deployment
 The deployed model runs on 1 instance type of a standard compute resource ("ml.t2.medium"). The configuration of these parameters are set using the PyTorch deploy function. 
@@ -98,6 +98,6 @@ response
 
 **ACTIVE ENDPOINT**
 - SAGEMAKER STUDIO UI
-![Active Endpoint](https://github.com/vanusquarm/Dog-breed-prediction/blob/main/screenshots/active-endpoint.PNG)
+![Active Endpoint](https://github.com/vanusquarm/CD0387-deep-learning-topics-within-computer-vision-nlp-project-starter/blob/main/screenshots/active-endpoint.PNG)
 
 
