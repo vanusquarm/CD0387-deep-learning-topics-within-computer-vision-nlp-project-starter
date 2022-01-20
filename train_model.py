@@ -1,130 +1,93 @@
-# Import your dependencies.
-
-import numpy as np
+import os
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torchvision
 import torchvision.models as models
-import torchvision.transforms as transforms
-import os
-import sys
-import logging
+from torchvision import datasets, transforms
 import argparse
+import smdebug.pytorch as smd
+
+# Some images fail to load...
 from PIL import ImageFile
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
-import smdebug.pytorch as smd
 
-logger=logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-logger.addHandler(logging.StreamHandler(sys.stdout))
-
-
-def test(model, test_loader, hook):
+def test(model, test_loader, criterion, hook):
     model.eval()
     hook.set_mode(smd.modes.EVAL)
-    running_corrects=0
-    for (inputs, labels) in test_loader:
+
+    running_loss = 0
+    running_corrects = 0
+
+    for inputs, labels in test_loader:
         outputs = model(inputs)
+        loss = criterion(outputs, labels)
         _, preds = torch.max(outputs, 1)
+        running_loss += loss.item() * inputs.size(0)
         running_corrects += torch.sum(preds == labels.data).item()
-    total_acc = running_corrects/ len(test_loader.dataset)
-    logger.info(f"Test set: Average accuracy: {100*total_acc}%")
-    
 
-def train(model, train_loader, valid_loader, epochs, criterion, optimizer, hook):
-    count = 0
-    for e in range(epochs):
-        print(e)
-        model.train()
-        hook.set_mode(smd.modes.TRAIN)
-        for (inputs, labels) in train_loader:
-            optimizer.zero_grad()
-            outputs = model(inputs)
-            loss = criterion(outputs, labels)
-            loss.backward()
-            optimizer.step()
-            count += len(inputs)
+    total_loss = running_loss / len(test_loader.dataset)
+    total_acc = running_corrects / len(test_loader.dataset)
+    print(f"Accuracy: {100 * total_acc}%, Testing Loss: {total_loss}")
 
-        # validation
-        model.eval()
-        hook.set_mode(smd.modes.EVAL)
-        running_corrects=0
-        with torch.no_grad():
-            for (inputs, labels) in valid_loader:
-                outputs = model(inputs)
-                loss = criterion(outputs, labels)
-                _, preds = torch.max(outputs, 1)
-                running_corrects += torch.sum(preds == labels.data).item()
-        total_acc = running_corrects/ len(valid_loader.dataset)
-        logger.info(f"Valid set: Average accuracy: {100*total_acc}%")
-        
-    return model
+
+def train(model, train_loader, criterion, optimizer, hook):
+    model.train()
+    hook.set_mode(smd.modes.TRAIN)
+    trained_images = 0
+    num_images = len(train_loader.dataset)
+    for (inputs, labels) in train_loader:
+        optimizer.zero_grad()
+        outputs = model(inputs)
+        loss = criterion(outputs, labels)
+        trained_images += len(inputs)
+        loss.backward()
+        optimizer.step()
+        print(f"{trained_images}/{num_images} images trained...")
+
 
 def net():
     model = models.resnet18(pretrained=True)
-    for param in model.parameters():
-        param.requires_grad = False   
 
-    num_features=model.fc.in_features
-    model.fc = nn.Sequential(nn.Linear(num_features, 133))
+    for param in model.parameters():
+        param.requires_grad = False
+
+    num_features = model.fc.in_features
+    model.fc = nn.Sequential(
+        nn.Linear(num_features, 133))
+
     return model
 
-def create_data_loaders(data, batch_size, test_batch_size):
-    train_data_path = os.path.join(data, 'train')
-    test_data_path = os.path.join(data, 'test')
-    validation_data_path = os.path.join(data, 'valid')
 
-    train_transform = transforms.Compose([
-        transforms.RandomResizedCrop((224, 224)),
-        transforms.RandomHorizontalFlip(),
-        transforms.ToTensor(),
-        ])
-
-    test_transform = transforms.Compose([
+def create_data_loaders(data_train, data_test, batch_size):
+    train_transforms = transforms.Compose([
+        # transforms.RandomRotation(30),
+        # transforms.RandomResizedCrop(224),
         transforms.Resize((224, 224)),
-        transforms.ToTensor(),
-        ])
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor()])
+
+    test_transforms = transforms.Compose([
+        transforms.Resize((224, 224)),
+        # transforms.CenterCrop(224),
+        transforms.ToTensor()])
     
-    trainset = torchvision.datasets.ImageFolder(root=train_data_path, transform=train_transform)
-    validset = torchvision.datasets.ImageFolder(root=validation_data_path, transform=test_transform)
-    testset = torchvision.datasets.ImageFolder(root=test_data_path, transform=test_transform)
+    trainset = datasets.ImageFolder(root=data_train, transform=train_transforms)
+    testset = datasets.ImageFolder(root=data_test, transform=test_transforms)
     
     return (
         torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuffle=True),
-        torch.utils.data.DataLoader(validset, batch_size=test_batch_size, shuffle=False),
-        torch.utils.data.DataLoader(testset, batch_size=test_batch_size, shuffle=False))
+        torch.utils.data.DataLoader(testset, batch_size=batch_size, shuffle=False))
 
-def main(args):
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    logging.info(f"Running on Device {device}")
 
-    model=net()
-    model=model.to(device)
-    loss_criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.fc.parameters(), lr=args.lr)
-    
-    hook = smd.Hook.create_from_json_file()
-    hook.register_hook(model)
-
-    train_loader, valid_loader, test_loader = create_data_loaders(args.data, args.batch_size, args.test_batch_size)
-    
-    model=train(model, train_loader, valid_loader, args.epochs, loss_criterion, optimizer, hook)
-    
-    # test(model, test_loader, hook)
-    
-    torch.save(model.cpu().state_dict(), os.path.join(args.model_dir, "model.pth"))
-
-if __name__=='__main__':
-    parser=argparse.ArgumentParser()
-
+def main():
+    parser = argparse.ArgumentParser()
     parser.add_argument(
         "--batch-size",
         type=int,
-        default=32,
+        default=64,
         metavar="N",
-        help="input batch size for training (default: 256)",
+        help="input batch size for training (default: 64)",
     )
     parser.add_argument(
         "--test-batch-size",
@@ -138,23 +101,36 @@ if __name__=='__main__':
         type=int,
         default=14,
         metavar="N",
-        help="number of epochs to train (default: 2)",
+        help="number of epochs to train (default: 14)",
     )
     parser.add_argument(
-        "--lr", type=float, default=0.001, metavar="LR", help="learning rate (default: 0.001)"
+        "--lr", type=float, default=1.0, metavar="LR", help="learning rate (default: 1.0)"
     )
-    parser.add_argument(
-        "--momentum", type=float, default=0.5, metavar="M", help="SGD momentum (default: 0.5)"
-    )
-    parser.add_argument('--data', type=str, default=os.environ["SM_CHANNEL_TRAIN"])
-    parser.add_argument('--model_dir', type=str, default=os.environ['SM_MODEL_DIR'])
-    
-    args=parser.parse_args()
-    
-    logging.info(f"Learning Rate: {args.lr}")
-    logging.info(f"Momentum: {args.momentum}")
-    logging.info(f"Batch Size: {args.batch_size}")
-    logging.info(f"Test Batch Size: {args.test_batch_size}")
-    logging.info(f"Epochs: {args.epochs}")
-    
-    main(args)
+    parser.add_argument('--model-dir', type=str, default=os.environ['SM_MODEL_DIR'])
+    parser.add_argument('--train', type=str, default=os.environ['SM_CHANNEL_TRAIN'])
+    parser.add_argument('--test', type=str, default=os.environ['SM_CHANNEL_TEST'])
+    args = parser.parse_args()
+
+    model = net()
+    loss_criterion = nn.CrossEntropyLoss()
+    optimizer = optim.Adam(model.fc.parameters(), lr=args.lr)
+
+    hook = smd.Hook.create_from_json_file()
+    hook.register_module(model)
+    hook.register_loss(loss_criterion)
+
+
+    train_loader, test_loader = create_data_loaders(args.train, args.test, args.batch_size)
+
+    for epoch in range(1, args.epochs + 1):
+        train(model, train_loader, loss_criterion, optimizer, hook)
+        test(model, test_loader, loss_criterion, hook)
+
+    path = os.path.join(args.model_dir, "model.pth")
+    torch.save(model.cpu().state_dict(), path)
+
+
+if __name__ == '__main__':
+    main()
+
+
